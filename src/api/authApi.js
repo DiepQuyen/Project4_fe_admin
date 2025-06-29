@@ -1,6 +1,6 @@
 import { authUtils } from 'utils/auth';
 
-const API_BASE_URL = 'https://sparlex.up.railway.app/api/v1';
+const API_BASE_URL = 'https://sparlex-spa.up.railway.app/api/v1';
 
 export const authApi = {
   // Admin/Staff login

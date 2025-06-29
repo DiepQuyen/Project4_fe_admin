@@ -39,7 +39,7 @@ export default function Login() {
     e.preventDefault();
     setError('');
     try {
-      const res = await fetch('https://sparlex.up.railway.app/api/v1/userDetail/login', {
+      const res = await fetch('https://sparlex-spa.up.railway.app/api/v1/userDetail/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -50,6 +50,7 @@ export default function Login() {
       }
 
       const data = await res.json();
+      console.log('Login response:', data);
 
       if (data.status === 'SUCCESS') {
         const token = data.data.token;

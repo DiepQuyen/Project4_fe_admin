@@ -18,7 +18,8 @@ import {
   InputAdornment,
   Box,
   Typography,
-  Tooltip
+  Tooltip,
+  CircularProgress
 } from '@mui/material';
 import MainCard from 'components/MainCard';
 import {
@@ -30,11 +31,12 @@ import {
 } from '@ant-design/icons';
 import { toast } from 'react-toastify';
 
-const API_URL = 'https://sparlex.up.railway.app/api/v1/roles';
+const API_URL = 'https://sparlex-spa.up.railway.app/api/v1/roles';
 
 const RoleManager = () => {
   // States
   const [roles, setRoles] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [currentRole, setCurrentRole] = useState(null);
   const [formData, setFormData] = useState({
@@ -46,6 +48,7 @@ const RoleManager = () => {
 
   // Load roles from backend
   useEffect(() => {
+    setLoading(true);
     fetch(API_URL)
       .then(res => res.json())
       .then(data => {
@@ -55,7 +58,8 @@ const RoleManager = () => {
           setRoles([]);
         }
       })
-      .catch(() => setRoles([]));
+      .catch(() => setRoles([]))
+      .finally(() => setLoading(false));
   }, []);
 
   // Handlers
@@ -168,20 +172,20 @@ const RoleManager = () => {
   );
 
   return (
-    <MainCard title="Role Management" secondary={
+    <MainCard title="Quản Lý Vai Trò" secondary={
       <Button
         variant="contained"
         startIcon={<PlusOutlined />}
         onClick={() => handleOpen()}
       >
-        Add Role
+        Thêm Vai Trò
       </Button>
     }>
       <Box sx={{ mb: 3 }}>
         <TextField
           fullWidth
           size="small"
-          placeholder="Search roles by name..."
+          placeholder="Tìm kiếm vai trò theo tên..."
           value={searchQuery}
           onChange={handleSearchChange}
           InputProps={{
@@ -210,7 +214,7 @@ const RoleManager = () => {
         sx={{
           boxShadow: 'none',
           borderRadius: '10px',
-          height: '400px',
+          maxHeight: '800px',
           overflow: 'auto'
         }}
       >
@@ -218,31 +222,46 @@ const RoleManager = () => {
           <TableHead>
             <TableRow>
               <TableCell>#</TableCell>
-              <TableCell>Role Name</TableCell>
-              <TableCell align="center">Actions</TableCell>
+              <TableCell>Tên Vai Trò</TableCell>
+              <TableCell align="center">Thao Tác</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredRoles
-              .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-              .map((role, index) => (
-                <TableRow key={role.id}>
-                  <TableCell>{page * rowsPerPage + index + 1}</TableCell>
-                  <TableCell>{role.name}</TableCell>
-                  <TableCell align="center">
-                    <Tooltip title="Edit">
-                      <IconButton size="small" color="primary" onClick={() => handleOpen(role)}>
-                        <EditOutlined />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete">
-                      <IconButton size="small" color="error" onClick={() => handleDelete(role.id)}>
-                        <DeleteOutlined />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={3} align="center" sx={{ py: 3 }}>
+                  <CircularProgress />
+                  <Typography sx={{ mt: 1 }}>Đang tải dữ liệu vai trò...</Typography>
+                </TableCell>
+              </TableRow>
+            ) : filteredRoles.length > 0 ? (
+              filteredRoles
+                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                .map((role, index) => (
+                  <TableRow key={role.id}>
+                    <TableCell>{page * rowsPerPage + index + 1}</TableCell>
+                    <TableCell>{role.name}</TableCell>
+                    <TableCell align="center">
+                      <Tooltip title="Edit">
+                        <IconButton size="small" color="primary" onClick={() => handleOpen(role)}>
+                          <EditOutlined />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete">
+                        <IconButton size="small" color="error" onClick={() => handleDelete(role.id)}>
+                          <DeleteOutlined />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={3} align="center">
+                  Không tìm thấy vai trò nào.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>
@@ -260,13 +279,13 @@ const RoleManager = () => {
       {/* Add/Edit Role Dialog */}
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {currentRole ? 'Edit Role' : 'Add Role'}
+          {currentRole ? 'Chỉnh Sửa Vai Trò' : 'Thêm Vai Trò'}
         </DialogTitle>
         <DialogContent>
           <TextField
             margin="dense"
             name="name"
-            label="Role Name"
+            label="Tên Vai Trò"
             type="text"
             fullWidth
             value={formData.name}
@@ -275,8 +294,8 @@ const RoleManager = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose} variant="outlined" color="inherit">Cancel</Button>
-          <Button onClick={handleSave} variant="contained" color="primary">Save</Button>
+          <Button onClick={handleClose} variant="outlined" color="inherit">Hủy</Button>
+          <Button onClick={handleSave} variant="contained" color="primary">Lưu</Button>
         </DialogActions>
       </Dialog>
     </MainCard>

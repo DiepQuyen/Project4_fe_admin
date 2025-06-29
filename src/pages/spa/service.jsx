@@ -22,7 +22,8 @@ import {
   Avatar,
   Chip,
   Typography,
-  Tooltip
+  Tooltip,
+  CircularProgress
 } from '@mui/material';
 import MainCard from 'components/MainCard';
 import {
@@ -38,17 +39,18 @@ import {
 } from '@ant-design/icons';
 import { toast } from 'react-toastify';
 
-const API_URL = 'https://sparlex.up.railway.app/api/v1/services';
+const API_URL = 'https://sparlex-spa.up.railway.app/api/v1/services';
 
 // Hàm tiện ích để định dạng tiền tệ
 const formatCurrency = (value) => {
-  if (!value) return '';
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
+  if (value == null) return '';
+  return `${new Intl.NumberFormat('vi-VN').format(value)} VND`;
 };
 
 const ServiceManagement = () => {
   // States
   const [services, setServices] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [currentService, setCurrentService] = useState(null);
@@ -67,6 +69,7 @@ const ServiceManagement = () => {
 
   // Load real data from BE
   useEffect(() => {
+    setLoading(true);
     fetch(API_URL)
       .then(res => res.json())
       .then(data => {
@@ -86,7 +89,8 @@ const ServiceManagement = () => {
           setServices([]);
         }
       })
-      .catch(() => setServices([]));
+      .catch(() => setServices([]))
+      .finally(() => setLoading(false));
   }, []);
 
   // Handlers
@@ -159,7 +163,7 @@ const ServiceManagement = () => {
       formDataUpload.append('file', file);
 
       try {
-        const res = await fetch('https://sparlex.up.railway.app/api/v1/upload', {
+        const res = await fetch('https://sparlex-spa.up.railway.app/api/v1/upload', {
           method: 'POST',
           body: formDataUpload
         });
@@ -365,7 +369,7 @@ const ServiceManagement = () => {
         sx={{
           boxShadow: 'none',
           borderRadius: '10px',
-          height: '400px',
+          maxHeight: '800px',
           overflow: 'auto'
         }}
       >
@@ -383,70 +387,85 @@ const ServiceManagement = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredServices
-              .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-              .map((service, index) => (
-                <TableRow
-                  key={service.service_id}
-                  hover
-                >
-                  <TableCell>{page * rowsPerPage + index + 1}</TableCell>
-                  <TableCell>
-                    <Avatar
-                      src={service.image_url}
-                      alt={service.name}
-                      variant="rounded"
-                      sx={{ width: 60, height: 60 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>
-                      {service.name}
-                    </Typography>
-                    <Typography variant="caption" color="textSecondary">
-                      {service.description.length > 50
-                        ? service.description.substring(0, 50) + '...'
-                        : service.description}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="primary" sx={{ fontWeight: 600 }}>
-                      {formatCurrency(service.price)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>{service.duration} min</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={service.is_active ? 'Hoạt Động' : 'Không Hoạt Động'}
-                      size="small"
-                      color={service.is_active ? 'success' : 'default'}
-                      icon={service.is_active ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
-                      onClick={() => handleStatusChange(service.service_id, !service.is_active)}
-                      sx={{ cursor: 'pointer' }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {service.created_at ? new Date(service.created_at).toLocaleDateString() : ''}
-                  </TableCell>
-                  <TableCell align="center">
-                    <Tooltip title="Xem Chi Tiết">
-                      <IconButton size="small" color="info" onClick={() => handleViewOpen(service)}>
-                        <EyeOutlined />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Chỉnh Sửa">
-                      <IconButton size="small" color="primary" onClick={() => handleOpen(service)}>
-                        <EditOutlined />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Xóa">
-                      <IconButton size="small" color="error" onClick={() => handleDelete(service.service_id)}>
-                        <DeleteOutlined />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
+                  <CircularProgress />
+                  <Typography sx={{ mt: 1 }}>Đang tải dữ liệu dịch vụ...</Typography>
+                </TableCell>
+              </TableRow>
+            ) : filteredServices.length > 0 ? (
+              filteredServices
+                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                .map((service, index) => (
+                  <TableRow
+                    key={service.service_id}
+                    hover
+                  >
+                    <TableCell>{page * rowsPerPage + index + 1}</TableCell>
+                    <TableCell>
+                      <Avatar
+                        src={service.image_url}
+                        alt={service.name}
+                        variant="rounded"
+                        sx={{ width: 60, height: 60 }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>
+                        {service.name}
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        {service.description.length > 50
+                          ? service.description.substring(0, 50) + '...'
+                          : service.description}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="primary" sx={{ fontWeight: 600 }}>
+                        {formatCurrency(service.price)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>{service.duration} phút</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={service.is_active ? 'Hoạt Động' : 'Không Hoạt Động'}
+                        size="small"
+                        color={service.is_active ? 'success' : 'default'}
+                        icon={service.is_active ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+                        onClick={() => handleStatusChange(service.service_id, !service.is_active)}
+                        sx={{ cursor: 'pointer' }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {service.created_at ? new Date(service.created_at).toLocaleDateString() : ''}
+                    </TableCell>
+                    <TableCell align="center">
+                      <Tooltip title="Xem Chi Tiết">
+                        <IconButton size="small" color="info" onClick={() => handleViewOpen(service)}>
+                          <EyeOutlined />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Chỉnh Sửa">
+                        <IconButton size="small" color="primary" onClick={() => handleOpen(service)}>
+                          <EditOutlined />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Xóa">
+                        <IconButton size="small" color="error" onClick={() => handleDelete(service.service_id)}>
+                          <DeleteOutlined />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={8} align="center">
+                  Không tìm thấy dịch vụ nào.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>

@@ -22,7 +22,7 @@ import { DeleteOutlined, SearchOutlined, CloseOutlined } from '@ant-design/icons
 import { toast } from 'react-toastify';
 import Swal from 'sweetalert2';
 
-const API_BASE_URL = 'https://sparlex.up.railway.app/api/v1/feedbacks';
+const API_BASE_URL = 'https://sparlex-spa.up.railway.app/api/v1/feedbacks';
 
 const FeedbackManager = () => {
   const [feedbacks, setFeedbacks] = useState([]);
@@ -76,14 +76,15 @@ const FeedbackManager = () => {
 
   const handleDelete = (feedbackId) => {
     Swal.fire({
-      title: 'Bạn có chắc chắn?',
+      title: 'Bạn có chắc chắn ẩn feedback này?',
       text: 'Bạn sẽ không thể hoàn tác hành động này!',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#3085d6',
       cancelButtonColor: '#d33',
-      confirmButtonText: 'Vâng, xóa nó!',
-      cancelButtonText: 'Hủy'
+      confirmButtonText: 'Vâng!',
+      cancelButtonText: 'Hủy',
+      reverseButtons: true
     }).then((result) => {
       if (result.isConfirmed) {
         // Giả sử API để xóa (soft-delete) có dạng: PUT /api/v1/feedbacks/delete/{id}
@@ -116,7 +117,7 @@ const FeedbackManager = () => {
   );
 
   return (
-    <MainCard title="Quản Lý Phản Hồi Khách Hàng">
+    <MainCard >
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <TextField
           size="small"
@@ -143,7 +144,7 @@ const FeedbackManager = () => {
 
       <Paper sx={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
         <TableContainer>
-          <Table sx={{ minWidth: 650 }}>
+          <Table sx={{ minWidth: 650, maxHeight: 800 }}>
             <TableHead sx={{ bgcolor: 'grey.50' }}>
               <TableRow>
                 <TableCell sx={{ pl: 3 }}>#</TableCell>
@@ -151,7 +152,6 @@ const FeedbackManager = () => {
                 <TableCell>Chủ Đề</TableCell>
                 <TableCell>Nội Dung</TableCell>
                 <TableCell>Ngày Gửi</TableCell>
-                <TableCell>Trạng Thái</TableCell>
                 <TableCell align="center" sx={{ pr: 3 }}>
                   Thao Tác
                 </TableCell>
@@ -173,9 +173,6 @@ const FeedbackManager = () => {
                       <Typography variant="body2" fontWeight="bold">
                         {fb.customerName || 'Khách vãng lai'}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        ID: {fb.customerId || 'N/A'}
-                      </Typography>
                     </TableCell>
                     <TableCell>{fb.subject || 'Không có chủ đề'}</TableCell>
                     <TableCell>
@@ -194,17 +191,14 @@ const FeedbackManager = () => {
                       </Tooltip>
                     </TableCell>
                     <TableCell>{new Date(fb.createdAt).toLocaleDateString('vi-VN')}</TableCell>
-                    <TableCell>
-                      <Chip label={fb.isActive ? 'Hoạt Động' : 'Đã Ẩn'} color={fb.isActive ? 'success' : 'default'} size="small" />
-                    </TableCell>
                     <TableCell align="center" sx={{ pr: 3 }}>
-                      <Tooltip title="Xóa (Ẩn) Feedback">
+                      <Tooltip title="Ẩn Feedback">
                         <span>
                           <IconButton
                             size="small"
                             color="error"
                             onClick={() => handleDelete(fb.id)}
-                            disabled={!fb.isActive} // Vô hiệu hóa nút nếu đã ẩn
+                            disabled={!fb.active} // Vô hiệu hóa nút nếu đã ẩn
                           >
                             <DeleteOutlined />
                           </IconButton>

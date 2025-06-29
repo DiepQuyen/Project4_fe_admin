@@ -28,7 +28,7 @@ import { EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import MainCard from 'components/MainCard';
 import { toast } from 'react-toastify';
 
-const API_URL = 'https://sparlex.up.railway.app/api/v1/timeslot';
+const API_URL = 'https://sparlex-spa.up.railway.app/api/v1/timeslot';
 
 const TimeSlotManagement = () => {
   const [timeslots, setTimeslots] = useState([]);
@@ -192,7 +192,7 @@ const TimeSlotManagement = () => {
   };
 
   return (
-    <MainCard title="Quản Lý Khung Giờ">
+    <MainCard >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
         <Button variant="contained" startIcon={<PlusOutlined />} onClick={handleOpenCreateDialog}>
           Tạo Khung Giờ Mới
@@ -223,7 +223,7 @@ const TimeSlotManagement = () => {
       ) : error ? (
         <Alert severity="error">{error}</Alert>
       ) : (
-        <TableContainer component={Paper}>
+        <TableContainer sx={{ maxHeight: 800 }} component={Paper}>
           <Table>
             <TableHead>
               <TableRow>

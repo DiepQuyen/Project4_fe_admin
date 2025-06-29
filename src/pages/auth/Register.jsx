@@ -30,7 +30,7 @@ export default function Register() {
     setError('');
     setSuccess('');
     try {
-      const res = await fetch('https://sparlex.up.railway.app/api/v1/userDetail/register', {
+      const res = await fetch('https://sparlex-spa.up.railway.app/api/v1/userDetail/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -102,12 +102,7 @@ export default function Register() {
                 onChange={e => setAddress(e.target.value)}
                 required
               />
-              <TextField
-                label="Mã chi nhánh"
-                value={branchId}
-                onChange={e => setBranchId(e.target.value)}
-                required
-              />
+          
               <Button type="submit" variant="contained" color="primary">
                 Đăng ký
               </Button>

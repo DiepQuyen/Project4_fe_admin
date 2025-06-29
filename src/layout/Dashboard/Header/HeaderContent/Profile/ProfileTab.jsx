@@ -22,7 +22,7 @@ export default function ProfileTab() {
   const navigate = useNavigate();
   const handleLogout = async () => {
     try {
-      await fetch('https://sparlex.up.railway.app/api/v1/userDetail/logout', { method: 'POST', credentials: 'include' });
+      await fetch('https://sparlex-spa.up.railway.app/api/v1/userDetail/logout', { method: 'POST', credentials: 'include' });
     } catch (e) { }
     Cookies.remove('admin_token', { path: '/admin' });
   Cookies.remove('admin_role', { path: '/admin' });
@@ -36,33 +36,33 @@ export default function ProfileTab() {
 
   return (
     <List component="nav" sx={{ p: 0, '& .MuiListItemIcon-root': { minWidth: 32 } }}>
-      <ListItemButton>
+      <ListItemButton onClick={() => navigate('/profile')}>
         <ListItemIcon>
           <EditOutlined />
         </ListItemIcon>
         <ListItemText primary="Chỉnh Sửa Hồ Sơ" />
       </ListItemButton>
       
-      <ListItemButton>
+      {/* <ListItemButton onClick={() => navigate('/profile')}>
         <ListItemIcon>
           <UserOutlined />
         </ListItemIcon>
         <ListItemText primary="Xem Hồ Sơ" />
-      </ListItemButton>
+      </ListItemButton> */}
 
-      <ListItemButton>
+      {/* <ListItemButton>
         <ListItemIcon>
           <ProfileOutlined />
         </ListItemIcon>
         <ListItemText primary="Hồ Sơ Xã Hội" />
-      </ListItemButton>
+      </ListItemButton> */}
       
-      <ListItemButton>
+      {/* <ListItemButton>
         <ListItemIcon>
           <WalletOutlined />
         </ListItemIcon>
         <ListItemText primary="Thanh Toán" />
-      </ListItemButton>
+      </ListItemButton> */}
       
       <ListItemButton onClick={handleLogout}>
         <ListItemIcon>

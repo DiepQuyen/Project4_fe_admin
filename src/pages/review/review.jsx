@@ -2,14 +2,15 @@ import { useState, useEffect } from 'react';
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
     IconButton, Tooltip, CircularProgress, FormControl, InputLabel, Select, MenuItem, Box,
-    Modal, Typography, TextField, Button, Paper, TablePagination
+    Modal, Typography, TextField, Button, Paper, TablePagination, Grid, Chip
 } from '@mui/material';
 import { DeleteOutlined, ReadFilled } from '@ant-design/icons'; // <<< THAY ĐỔI: Dùng ReadFilled cho trực quan
 import { useNavigate } from 'react-router-dom';
 import MainCard from 'components/MainCard';
 import { toast } from 'react-toastify';
+import Swal from 'sweetalert2';
 
-const API_BASE_URL = 'https://sparlex.up.railway.app/api/v1';
+const API_BASE_URL = 'https://sparlex-spa.up.railway.app/api/v1';
 
 // Style cho Modal
 const modalStyle = {
@@ -29,7 +30,12 @@ const ReviewList = () => {
     const [reviews, setReviews] = useState([]);
     const [loading, setLoading] = useState(false);
     const [statusFilter, setStatusFilter] = useState('all');
+    const [ratingFilter, setRatingFilter] = useState('all');
+    const [typeFilter, setTypeFilter] = useState('all');
+    const [staffFilter, setStaffFilter] = useState('all');
+    const [staffList, setStaffList] = useState([]);
     const [page, setPage] = useState(0);
+    const [totalElement, setTotalElement] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
 
     // State để quản lý modal phản hồi
@@ -43,7 +49,7 @@ const ReviewList = () => {
         console.log('🔍 Review clicked:', review);
         
         // Kiểm tra xem review có thông tin service không
-        if (review.type === 'SERVICE' && review.relatedId) {
+        if (review.type === 'service' && review.relatedId) {
             // Chuyển đến trang appointment với filter theo service
             navigate('/spa/appointments', {
                 state: {
@@ -56,7 +62,7 @@ const ReviewList = () => {
                 }
             });
             toast.info(`Chuyển đến trang đặt lịch cho dịch vụ: ${review.serviceName || `#${review.relatedId}`}`);
-        } else if (review.type === 'USER' && review.relatedId) {
+        } else if (review.type === 'staff' && review.relatedId) {
             // Nếu là review cho nhân viên, chuyển đến trang appointment với filter theo staff
             navigate('/spa/appointments', {
                 state: {
@@ -89,7 +95,8 @@ const ReviewList = () => {
         console.log('🚀 Bắt đầu quá trình fetch reviews...');
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${API_BASE_URL}/reviews/findAll`, {
+            const ratingParam = ratingFilter !== 'all' ? `&rating=${ratingFilter}` : '';
+            const res = await fetch(`${API_BASE_URL}/reviews/reviews?page=${page}&size=${rowsPerPage}${ratingParam}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -104,10 +111,10 @@ const ReviewList = () => {
             const data = await res.json();
             console.log('✅ Dữ liệu thô nhận được từ /reviews/findAll:', data);
 
-            if (data.status === 'SUCCESS' && Array.isArray(data.data)) {
-                const reviewsData = data.data;
+            if (Array.isArray(data.content)) {
+                const reviewsData = data.content;
                 console.log(`🔍 Tìm thấy ${reviewsData.length} review(s). Bắt đầu lấy chi tiết...`);
-
+                setTotalElement(data.totalElements || 0);
                 const reviewsWithDetails = await Promise.all(
                     reviewsData.map(async (review) => {
                         // Kiểm tra review và review.id trước khi fetch
@@ -151,7 +158,30 @@ const ReviewList = () => {
         setLoading(false);
     };
 
-    useEffect(() => { fetchReviews(); }, []);
+    useEffect(() => { fetchReviews(); }, [page, rowsPerPage]);
+
+    // Lấy danh sách nhân viên để lọc
+    useEffect(() => {
+        const fetchStaff = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                // API này đã được sử dụng ở các trang khác để lấy nhân viên
+                const res = await fetch(`${API_BASE_URL}/admin/accounts/find-all`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const response = await res.json();
+                if (response.status === 'SUCCESS' && Array.isArray(response.data)) {
+                    const staffUsers = response.data.filter(user => user.role?.name?.toUpperCase() === 'STAFF');
+                    setStaffList(staffUsers);
+                } else {
+                    console.error("Không thể tải danh sách nhân viên:", response.message);
+                }
+            } catch (error) {
+                console.error("Lỗi kết nối khi tải danh sách nhân viên:", error);
+            }
+        };
+        fetchStaff();
+    }, []);
 
     // Các hàm xử lý modal
     const handleOpenReplyModal = (review) => {
@@ -201,10 +231,23 @@ const ReviewList = () => {
 
     // Xóa review (soft-delete)
     const handleDelete = async (id) => {
-        if (!confirm('Bạn có chắc chắn muốn thay đổi trạng thái đánh giá này?')) {
-      toast.info('Đã hủy thay đổi trạng thái.');
-      return;
-    }
+        const result = await Swal.fire({
+            title: 'Bạn có chắc chắn?',
+            text: 'Thao tác này sẽ thay đổi trạng thái đánh giá!',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Đồng ý',
+            cancelButtonText: 'Hủy',
+            reverseButtons: true
+        });
+
+        if (!result.isConfirmed) {
+            toast.info('Đã hủy thay đổi trạng thái.');
+            return;
+        }
+
         setLoading(true);
         const token = localStorage.getItem('token');
         try {
@@ -216,21 +259,32 @@ const ReviewList = () => {
             });
             const data = await res.json();
             if (data.status === 'SUCCESS') {
-                toast.success('Review status changed!');
+                toast.success('Đã thay đổi trạng thái đánh giá!');
                 fetchReviews();
-            } else toast.error(data.message || 'Failed');
+            } else {
+                toast.error(data.message || 'Thất bại');
+            }
         } catch {
-            toast.error('Error');
+            toast.error('Đã xảy ra lỗi khi xóa');
         }
         setLoading(false);
     };
 
     const filteredReviews = reviews.filter(r => {
-        if (statusFilter === 'all') return true;
-        if (statusFilter === 'active') return r.active === true || r.active === 1;
-        if (statusFilter === 'inactive') return r.active === false || r.active === 0;
-        return true;
+        const statusMatch = statusFilter === 'all' ||
+            (statusFilter === 'active' && (r.active === true || r.active === 1)) ||
+            (statusFilter === 'inactive' && (r.active === false || r.active === 0));
+
+        const ratingMatch = ratingFilter === 'all' || r.rating === ratingFilter;
+
+        const typeMatch = typeFilter === 'all' || r.type === typeFilter;
+
+        // Lọc theo nhân viên chỉ áp dụng khi loại là 'staff'
+        const staffMatch = typeFilter !== 'staff' || staffFilter === 'all' || String(r.relatedId) === String(staffFilter);
+
+        return statusMatch && ratingMatch && typeMatch && staffMatch;
     });
+
 
     const handleChangePage = (event, newPage) => {
         setPage(newPage);
@@ -240,27 +294,32 @@ const ReviewList = () => {
         setRowsPerPage(parseInt(event.target.value, 10));
         setPage(0);
     };
+    useEffect(() => {
+        fetchReviews();
+    }, [page, rowsPerPage, ratingFilter]);
 
-    const paginatedReviews = filteredReviews.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
     return (
         <MainCard title="Tất Cả Đánh Giá">
-            <Box mb={2} display="flex" justifyContent="flex-end">
+            <Box mb={2} display="flex" justifyContent="flex-start">
                 <FormControl size="small" sx={{ minWidth: 160 }}>
-                    <InputLabel>Trạng Thái</InputLabel>
+                    <InputLabel>Đánh giá</InputLabel>
                     <Select
-                        value={statusFilter}
-                        label="Trạng Thái"
-                        onChange={e => setStatusFilter(e.target.value)}
+                      value={ratingFilter}
+                      label="Rating"
+                      onChange={e => setRatingFilter(e.target.value)}
                     >
-                        <MenuItem value="all">Tất Cả</MenuItem>
-                        <MenuItem value="active">Hoạt Động</MenuItem>
-                        <MenuItem value="inactive">Không Hoạt Động</MenuItem>
+                        <MenuItem value="all">Tất cả</MenuItem>
+                        <MenuItem value={5}>5 ⭐</MenuItem>
+                        <MenuItem value={4}>4 ⭐</MenuItem>
+                        <MenuItem value={3}>3 ⭐</MenuItem>
+                        <MenuItem value={2}>2 ⭐</MenuItem>
+                        <MenuItem value={1}>1 ⭐</MenuItem>
                     </Select>
                 </FormControl>
+
             </Box>
-            {loading && <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}><CircularProgress /></Box>}
-            <TableContainer>
+            <TableContainer sx={{ maxHeight: 800 }}>
                 <Table>
                     <TableHead>
                         <TableRow>
@@ -275,11 +334,21 @@ const ReviewList = () => {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {paginatedReviews.map((r) => (
+                        {loading &&
+                          <TableCell colSpan={8}><Box sx={{ display: 'flex', justifyContent: 'center', my: 2, top: "calc(50% - 20px)", left: "calc(50% - 20px)", zIndex:'100000' }}><CircularProgress /></Box></TableCell>}
+
+                        {!loading && reviews.map((r) => (
                             <TableRow key={r.id}>
                                 <TableCell>{r.id}</TableCell>
                                 <TableCell>{r.authorName || 'N/A'}</TableCell>
-                                <TableCell>{r.type}</TableCell>
+                                <TableCell>
+                                    <Chip
+                                        label={r.type === 'service' ? 'Dịch Vụ' : 'Nhân Viên'}
+                                        color={r.type === 'service' ? 'primary' : 'secondary'}
+                                        size="small"
+                                        variant="outlined"
+                                    />
+                                </TableCell>
                                 <TableCell sx={{ minWidth: 250 }}>
                                     {/* // <<< THAY ĐỔI: Hiển thị comment và reply tại đây */}
                                     <Box>
@@ -301,20 +370,11 @@ const ReviewList = () => {
                                         cursor: 'pointer', 
                                         color: 'primary.main',
                                         fontWeight: 'bold',
-                                        '&:hover': {
-                                            backgroundColor: 'primary.light',
-                                            color: 'white',
-                                            borderRadius: '4px',
-                                            transform: 'scale(1.05)',
-                                            transition: 'all 0.2s'
-                                        },
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: 1,
                                         padding: '8px'
                                     }}
-                                    onClick={() => handleRatingClick(r)}
-                                    title={`Click để đặt lịch ${r.type === 'SERVICE' ? 'dịch vụ' : 'nhân viên'} này`}
                                 >
                                     <Box sx={{ 
                                         display: 'flex', 
@@ -322,20 +382,16 @@ const ReviewList = () => {
                                         backgroundColor: 'primary.lighter',
                                         padding: '4px 8px',
                                         borderRadius: '12px',
-                                        '&:hover': {
-                                            backgroundColor: 'primary.light',
-                                            color: 'white'
-                                        }
                                     }}>
                                         <span style={{ fontSize: '16px' }}>{r.rating}</span>
                                         <span style={{ color: '#FFD700', marginLeft: '4px' }}>⭐</span>
                                     </Box>
-                                    {r.type === 'SERVICE' && (
+                                    {r.type === 'service' && (
                                         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                                             {r.serviceName || `Dịch vụ #${r.relatedId}`}
                                         </Typography>
                                     )}
-                                    {r.type === 'USER' && (
+                                    {r.type === 'staff' && (
                                         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                                             {r.userName || `Nhân viên #${r.relatedId}`}
                                         </Typography>
@@ -370,7 +426,7 @@ const ReviewList = () => {
                                 </TableCell>
                             </TableRow>
                         ))}
-                        {filteredReviews.length === 0 && !loading && <TableRow><TableCell colSpan={9} align="center">Không tìm thấy đánh giá nào.</TableCell></TableRow>}
+                        {reviews.length === 0 && !loading && <TableRow><TableCell colSpan={9} align="center">Không tìm thấy đánh giá nào.</TableCell></TableRow>}
                     </TableBody>
                 </Table>
             </TableContainer>
@@ -378,7 +434,7 @@ const ReviewList = () => {
             <TablePagination
                 rowsPerPageOptions={[5, 10, 25]}
                 component="div"
-                count={filteredReviews.length}
+                count={totalElement}
                 rowsPerPage={rowsPerPage}
                 page={page}
                 onPageChange={handleChangePage}

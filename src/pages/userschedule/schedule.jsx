@@ -26,7 +26,9 @@ import {
   InputLabel,
   Chip,
   Avatar,
-  Grid
+  Grid,
+  CircularProgress,
+  Autocomplete
 } from '@mui/material';
 import MainCard from 'components/MainCard';
 import {
@@ -39,8 +41,9 @@ import {
   CheckCircleOutlined
 } from '@ant-design/icons';
 import { toast } from 'react-toastify';
+import Swal from 'sweetalert2';
 
-const API_BASE_URL = 'https://sparlex.up.railway.app/api/v1';
+const API_BASE_URL = 'https://sparlex-spa.up.railway.app/api/v1';
 const SCHEDULE_API_URL = `${API_BASE_URL}/users-schedules`;
 const USER_API_URL = `${API_BASE_URL}/admin/accounts/find-all`;
 const TIMESLOT_API_URL = `${API_BASE_URL}/timeslot`;
@@ -105,6 +108,7 @@ const UserScheduleManager = () => {
   const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [loading, setLoading] = useState(false);
 
   // Fallback for old format or unmatched strings
   const formatShift = (shiftType, startTime, endTime) => {
@@ -159,7 +163,7 @@ const UserScheduleManager = () => {
       const slotId = slot.slotId || slot.slot_id || slot.id;
 
       return {
-        value: slotName,
+        value: slotId, // Use unique ID for value
         label: slotName,
         defaultStart: startTime ? startTime.substring(0, 5) : '',
         defaultEnd: endTime ? endTime.substring(0, 5) : '',
@@ -186,31 +190,18 @@ const UserScheduleManager = () => {
 
     let newShiftForm = { ...shiftForm, [field]: safeValue };
 
-    // Auto-fill start and end time when shift type is selected
-    if (field === 'shiftType' && safeValue) {
-      const shiftOptions = getShiftOptions();
-      console.log('Available shift options:', shiftOptions); // Debug log
-
-      const selectedShift = shiftOptions.find(option => option.value === safeValue);
-      console.log('Selected shift:', selectedShift); // Debug log
-
-      if (selectedShift) {
-        newShiftForm = {
-          ...newShiftForm,
-          startTime: selectedShift.defaultStart || '',
-          endTime: selectedShift.defaultEnd || ''
-        };
-      }
-    }
-
-    console.log('New shift form:', newShiftForm); // Debug log
     setShiftForm(newShiftForm);
 
     // Update the main formData.shift field with formatted string
     const formattedShift = formatShift(newShiftForm.shiftType, newShiftForm.startTime, newShiftForm.endTime);
     console.log('Formatted shift:', formattedShift); // Debug log
 
-    setFormData(prev => ({ ...prev, shift: formattedShift }));
+    // If start/end time is changed manually, it's a custom shift. Deselect the timeslot.
+    if (field === 'startTime' || field === 'endTime') {
+       setFormData(prev => ({ ...prev, shift: formattedShift, timeSlotId: '' }));
+    } else {
+       setFormData(prev => ({ ...prev, shift: formattedShift }));
+    }
   };
 
   // Handle time form changes for check-in/check-out
@@ -277,6 +268,7 @@ const UserScheduleManager = () => {
       url += `?${params.toString()}`;
     }
 
+    setLoading(true);
     fetch(url)
       .then(res => res.json())
       .then(response => {
@@ -289,6 +281,9 @@ const UserScheduleManager = () => {
       .catch(() => {
         setSchedules([]);
         toast.error('Error loading schedules from server.');
+      })
+      .finally(() => {
+        setLoading(false);
       });
   };
 
@@ -320,15 +315,29 @@ const UserScheduleManager = () => {
         break;
       case 'month':
         setFilterMonth(value);
+        setStartDate('');
+        setEndDate('');
         break;
       case 'year':
         setFilterYear(value);
+        setStartDate('');
+        setEndDate('');
         break;
       case 'startDate':
+        if (endDate && value > endDate) {
+          setEndDate('');
+        }
         setStartDate(value);
+        setFilterMonth('');
+        setFilterYear('');
         break;
       case 'endDate':
+        if (startDate && value < startDate) {
+          setStartDate('');
+        }
         setEndDate(value);
+        setFilterMonth('');
+        setFilterYear('');
         break;
       default:
         break;
@@ -360,11 +369,20 @@ const UserScheduleManager = () => {
         checkOutTime: schedule.checkOutTime ? formatTime(schedule.checkOutTime) : ''
       });
 
+      // Find the matching timeslot to pre-select it in dropdown
+      const matchingTimeslot = timeslots.find(slot => {
+        const slotName = slot.shift || slot.slotName || slot.name;
+        const startTime = (slot.startTime || slot.start_time || '').substring(0, 5);
+        const endTime = (slot.endTime || slot.end_time || '').substring(0, 5);
+        return slotName === parsedShift.shiftType && startTime === parsedShift.startTime && endTime === parsedShift.endTime;
+      });
+      const initialTimeSlotId = matchingTimeslot ? (matchingTimeslot.slotId || matchingTimeslot.slot_id || matchingTimeslot.id) : '';
+
       setFormData({
         userId: schedule.userId || '',
         shift: schedule.shift || '',
         workDate: schedule.workDate || '',
-        timeSlotId: '', // Không sử dụng timeslot
+        timeSlotId: initialTimeSlotId, // Use the found ID
         status: schedule.status || 'pending',
         isLastTask: schedule.isLastTask || false,
         isActive: schedule.isActive === undefined ? true : schedule.isActive,
@@ -377,7 +395,7 @@ const UserScheduleManager = () => {
         userId: '',
         shift: '',
         workDate: '',
-        timeSlotId: '', // Không sử dụng timeslot
+        timeSlotId: '', // Correctly empty for new schedule
         status: 'pending',
         isLastTask: false,
         isActive: true
@@ -414,6 +432,21 @@ const UserScheduleManager = () => {
     // Validation - Chỉ yêu cầu shift custom
     if (!formData.userId || !formData.workDate) {
       toast.error("Vui lòng chọn Nhân viên và Ngày làm việc.");
+      return;
+    }
+
+    // For new schedules, prevent setting schedule for a past date.
+    // For existing schedules, prevent moving them to a past date (but allow saving changes on the same past date).
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const parts = formData.workDate.split('-').map(Number);
+    const selectedDate = new Date(parts[0], parts[1] - 1, parts[2]);
+
+    const isEditing = !!currentSchedule;
+    const originalDateStr = isEditing ? new Date(currentSchedule.workDate).toISOString().split('T')[0] : null;
+
+    if (selectedDate <= today && formData.workDate !== originalDateStr) {
+      toast.error("Không thể tạo hoặc dời lịch trình vào hôm nay hoặc một ngày trong quá khứ.");
       return;
     }
 
@@ -482,22 +515,38 @@ const UserScheduleManager = () => {
   };
 
   const handleDeleteSchedule = (scheduleId) => {
-    toast.warning('Đang xóa lịch trình...', { autoClose: 1000 });
-    fetch(`${SCHEDULE_API_URL}/${scheduleId}`, {
-      method: 'PUT',
-    })
-      .then(res => res.json())
-      .then(response => {
-        if (response.status === 'SUCCESS') {
-          fetchSchedules();
-          toast.success(response.message || 'Đã xóa lịch trình thành công.');
-        } else {
-          toast.error(response.message || 'Xóa lịch trình thất bại.');
-        }
-      })
-      .catch(() => toast.error('Lỗi khi xóa lịch trình.'));
-  };
+    Swal.fire({
+      title: 'Bạn có chắc chắn?',
+      text: 'Lịch trình này sẽ bị vô hiệu hóa!',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Xóa',
+      cancelButtonText: 'Hủy',
+      reverseButtons: true
+    }).then((result) => {
+      if (result.isConfirmed) {
+        toast.warning('Đang xóa lịch trình...', { autoClose: 1000 });
 
+        fetch(`${SCHEDULE_API_URL}/${scheduleId}`, {
+          method: 'PUT',
+        })
+          .then(res => res.json())
+          .then(response => {
+            if (response.status === 'SUCCESS') {
+              fetchSchedules();
+              toast.success(response.message || 'Đã xóa lịch trình thành công.');
+            } else {
+              toast.error(response.message || 'Xóa lịch trình thất bại.');
+            }
+          })
+          .catch(() => toast.error('Lỗi khi xóa lịch trình.'));
+      } else {
+        toast.info('Đã hủy thao tác.');
+      }
+    });
+  };
   const handleCheckIn = (scheduleId) => {
     toast.info('Đang thực hiện check-in...', { autoClose: 1000 });
     fetch(`${SCHEDULE_API_URL}/check-in/${scheduleId}`, {
@@ -546,19 +595,38 @@ const UserScheduleManager = () => {
     );
   };
 
-  const filteredSchedules = schedules.filter(schedule =>
-    (schedule.userName && schedule.userName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (schedule.shift && schedule.shift.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (schedule.status && schedule.status.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (schedule.roleName && schedule.roleName.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredSchedules = schedules.filter(schedule => {
+    // Filter by date range on the client-side to ensure correctness
+    let dateInRange = true;
+    if (startDate && schedule.workDate < startDate) {
+      dateInRange = false;
+    }
+    if (endDate && schedule.workDate > endDate) {
+      dateInRange = false;
+    }
+  
+    // Original search filter logic
+    const searchMatch = (
+      (schedule.userName && schedule.userName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (schedule.shift && schedule.shift.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (schedule.status && schedule.status.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (schedule.roleName && schedule.roleName.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  
+    // Return true only if both conditions are met
+    return dateInRange && searchMatch;
+  });
 
-  // Generate year options (current year ± 2)
+  // Generate year options (from 2 years ago to current year)
   const currentYear = new Date().getFullYear();
   const yearOptions = [];
-  for (let i = currentYear - 2; i <= currentYear + 2; i++) {
+  for (let i = currentYear - 2; i <= currentYear; i++) {
     yearOptions.push(i);
   }
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const minDateForNew = tomorrow.toISOString().split('T')[0];
 
   return (
     <MainCard title="Quản Lý Lịch Trình Nhân Viên" secondary={
@@ -673,6 +741,7 @@ const UserScheduleManager = () => {
               value={startDate}
               onChange={(e) => handleFilterChange('startDate', e.target.value)}
               InputLabelProps={{ shrink: true }}
+              inputProps={{ max: endDate || undefined }}
               fullWidth
             />
           </Grid>
@@ -685,6 +754,7 @@ const UserScheduleManager = () => {
               value={endDate}
               onChange={(e) => handleFilterChange('endDate', e.target.value)}
               InputLabelProps={{ shrink: true }}
+              inputProps={{ min: startDate || undefined }}
               fullWidth
             />
           </Grid>
@@ -701,7 +771,7 @@ const UserScheduleManager = () => {
       </Box>
 
       <Paper sx={{ mt: 3, borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
-        <TableContainer>
+        <TableContainer sx={{ maxHeight: 800 }}>
           <Table sx={{ minWidth: 650 }}>
             <TableHead sx={{ bgcolor: 'grey.50' }}>
               <TableRow>
@@ -714,128 +784,116 @@ const UserScheduleManager = () => {
                 <TableCell sx={{ py: 2 }}>Giờ Ra</TableCell>
                 <TableCell sx={{ py: 2 }}>Trạng Thái</TableCell>
                 <TableCell sx={{ py: 2 }}>Hoạt Động</TableCell>
-                <TableCell align="center" sx={{ pr: 3, py: 2 }}>Thao Tác</TableCell>
+                <TableCell align="center" sx={{ pr: 3, py: 2, textAlign:'left' }}>Thao Tác</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredSchedules
-                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                .map((schedule, index) => (
-                  <TableRow
-                    key={schedule.id}
-                    hover
-                    sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
-                  >
-                    <TableCell sx={{ pl: 3, py: 1.5 }}>{page * rowsPerPage + index + 1}</TableCell>
-                    <TableCell sx={{ py: 1.5 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Avatar
-                          src={schedule.userImageUrl}
-                          alt={schedule.userName}
-                          sx={{ width: 32, height: 32 }}
-                        >
-                          {schedule.userName?.charAt(0)}
-                        </Avatar>
-                        <Box>
-                          <Typography variant="body2" fontWeight="medium">
-                            {schedule.userName}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {schedule.userEmail}
-                          </Typography>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={10} align="center" sx={{ py: 5 }}>
+                    <CircularProgress />
+                    <Typography variant="subtitle1" sx={{ mt: 1 }}>Đang tải dữ liệu lịch trình...</Typography>
+                  </TableCell>
+                </TableRow>
+              ) : filteredSchedules.length > 0 ? (
+                filteredSchedules
+                  .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                  .map((schedule, index) => (
+                    <TableRow
+                      key={schedule.id}
+                      hover
+                      sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+                    >
+                      <TableCell sx={{ pl: 3, py: 1.5 }}>{page * rowsPerPage + index + 1}</TableCell>
+                      <TableCell sx={{ py: 1.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Avatar
+                            src={schedule.userImageUrl}
+                            alt={schedule.userName}
+                            sx={{ width: 32, height: 32 }}
+                          >
+                            {schedule.userName?.charAt(0)}
+                          </Avatar>
+                          <Box>
+                            <Typography variant="body2" fontWeight="medium">
+                              {schedule.userName}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {schedule.userEmail}
+                            </Typography>
+                          </Box>
                         </Box>
-                      </Box>
-                    </TableCell>
-                    <TableCell sx={{ py: 1.5 }}>
-                      <Typography variant="body2" color="primary">
-                        {schedule.roleName}
-                      </Typography>
-                    </TableCell>
-                    <TableCell sx={{ py: 1.5 }}>
-                      <Typography variant="body2">
-                        {new Date(schedule.workDate).toLocaleDateString('vi-VN')}
-                      </Typography>
-                    </TableCell>
-                    <TableCell sx={{ py: 1.5 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                        <ClockCircleOutlined style={{ color: '#1976d2', fontSize: '14px', marginTop: '3px' }} />
-                        {(() => {
-                          const { shiftType, startTime, endTime } = parseShift(schedule.shift);
-                          return (
-                            <Box>
-                              <Typography variant="body2" fontWeight="medium" sx={{ lineHeight: 1.3 }}>
-                                {shiftType || 'Không xác định'}
-                              </Typography>
-                              {startTime && endTime && (
-                                <Typography variant="caption" color="text.secondary">
-                                  {`(${startTime} - ${endTime})`}
+                      </TableCell>
+                      <TableCell sx={{ py: 1.5 }}>
+                        <Typography variant="body2" color="primary">
+                          {schedule.roleName}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ py: 1.5 }}>
+                        <Typography variant="body2">
+                          {new Date(schedule.workDate).toLocaleDateString('vi-VN', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit'
+                          })}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ py: 1.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                          <ClockCircleOutlined style={{ color: '#1976d2', fontSize: '14px', marginTop: '3px' }} />
+                          {(() => {
+                            const { shiftType, startTime, endTime } = parseShift(schedule.shift);
+                            return (
+                              <Box>
+                                <Typography variant="body2" fontWeight="medium" sx={{ lineHeight: 1.3 }}>
+                                  {shiftType || 'Không xác định'}
                                 </Typography>
-                              )}
-                            </Box>
-                          );
-                        })()}
-                      </Box>
-                    </TableCell>
-                    <TableCell sx={{ py: 1.5 }}>
-                      <Typography variant="body2" color={schedule.checkInTime ? 'success.main' : 'text.secondary'}>
-                        {formatTime(schedule.checkInTime) || '--:--'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell sx={{ py: 1.5 }}>
-                      <Typography variant="body2" color={schedule.checkOutTime ? 'success.main' : 'text.secondary'}>
-                        {formatTime(schedule.checkOutTime) || '--:--'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell sx={{ py: 1.5 }}>{getStatusChip(schedule.status)}</TableCell>
-                    <TableCell sx={{ py: 1.5 }}>
-                      <Chip
-                        label={schedule.isActive ? 'Hoạt Động' : 'Không Hoạt Động'}
-                        size="small"
-                        color={schedule.isActive ? 'success' : 'default'}
-                      />
-                    </TableCell>
-                    <TableCell align="center" sx={{ py: 1.5 }}>
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        <Tooltip title="Chỉnh Sửa">
-                          <IconButton size="small" color="primary" onClick={() => handleOpenDialog(schedule)}>
-                            <EditOutlined />
-                          </IconButton>
-                        </Tooltip>
-
-                        {!schedule.checkInTime && (
-                          <Tooltip title="Check In">
-                            <IconButton
-                              size="small"
-                              color="success"
-                              onClick={() => handleCheckIn(schedule.id)}
-                            >
-                              <ClockCircleOutlined />
+                                {startTime && endTime && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    {`(${startTime} - ${endTime})`}
+                                  </Typography>
+                                )}
+                              </Box>
+                            );
+                          })()}
+                        </Box>
+                      </TableCell>
+                      <TableCell sx={{ py: 1.5 }}>
+                        <Typography variant="body2" color={schedule.checkInTime ? 'success.main' : 'text.secondary'}>
+                          {formatTime(schedule.checkInTime) || '--:--'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ py: 1.5 }}>
+                        <Typography variant="body2" color={schedule.checkOutTime ? 'success.main' : 'text.secondary'}>
+                          {formatTime(schedule.checkOutTime) || '--:--'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ py: 1.5 }}>{getStatusChip(schedule.status)}</TableCell>
+                      <TableCell sx={{ py: 1.5 }}>
+                        <Chip
+                          label={schedule.isActive ? 'Hoạt Động' : 'Không Hoạt Động'}
+                          size="small"
+                          color={schedule.isActive ? 'success' : 'default'}
+                        />
+                      </TableCell>
+                      <TableCell align="center" sx={{ py: 1.5 }}>
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                          <Tooltip title="Chỉnh Sửa">
+                            <IconButton size="small" color="primary" onClick={() => handleOpenDialog(schedule)}>
+                              <EditOutlined />
                             </IconButton>
                           </Tooltip>
-                        )}
 
-                        {schedule.checkInTime && !schedule.checkOutTime && (
-                          <Tooltip title="Check Out">
-                            <IconButton
-                              size="small"
-                              color="warning"
-                              onClick={() => handleCheckOut(schedule.id)}
-                            >
-                              <CheckCircleOutlined />
+                          <Tooltip title="Xóa (Vô hiệu hóa)">
+                            <IconButton size="small" color="error" onClick={() => handleDeleteSchedule(schedule.id)}>
+                              <DeleteOutlined />
                             </IconButton>
                           </Tooltip>
-                        )}
-
-                        <Tooltip title="Xóa (Vô hiệu hóa)">
-                          <IconButton size="small" color="error" onClick={() => handleDeleteSchedule(schedule.id)}>
-                            <DeleteOutlined />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              {filteredSchedules.length === 0 && (
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))
+              ) : (
                 <TableRow>
                   <TableCell colSpan={10} align="center" sx={{ py: 5 }}>
                     <Typography variant="subtitle1">Không có dữ liệu lịch trình.</Typography>
@@ -862,57 +920,24 @@ const UserScheduleManager = () => {
           {currentSchedule ? 'Chỉnh Sửa Lịch Trình' : 'Thêm Lịch Trình Mới'}
         </DialogTitle>
         <DialogContent>
-          <FormControl fullWidth margin="dense" required>
-            <InputLabel id="shiftType-label">Loại Ca</InputLabel>
-            <Select
-              labelId="shiftType-label"
-              value={shiftForm.shiftType || ''} // Ensure never undefined
-              label="Loại Ca"
-              onChange={(e) => {
-                console.log('Select onChange triggered with value:', e.target.value);
-                console.log('Event target:', e.target);
-                handleShiftFormChange('shiftType', e.target.value);
-              }}
-              MenuProps={{
-                PaperProps: {
-                  style: {
-                    maxHeight: 224,
-                    width: 250,
-                  },
-                },
-              }}
-            >
-              <MenuItem value="">
-                <em>Chọn Ca</em>
-              </MenuItem>
-              {getShiftOptions().map((option, index) => {
-                console.log(`Rendering option ${index}:`, option); // Debug log
-
-                // Skip options with invalid data
-                if (!option.value || !option.label) {
-                  console.warn('Skipping invalid option:', option);
-                  return null;
-                }
-
-                return (
-                  <MenuItem
-                    key={`shift-${option.id || index}-${option.value}`}
-                    value={option.value}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <ClockCircleOutlined style={{ color: '#1976d2' }} />
-                      <Box>
-                        <Typography>{option.label}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {option.defaultStart} - {option.defaultEnd}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </MenuItem>
-                );
-              })}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            id="user-autocomplete"
+            options={users}
+            getOptionLabel={(option) => option.fullName || ''}
+            value={users.find((user) => user.id === formData.userId) || null}
+            onChange={(event, newValue) => {
+              setFormData(prev => ({ ...prev, userId: newValue ? newValue.id : '' }));
+            }}
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+            renderInput={(params) => <TextField {...params} label="Nhân Viên" margin="dense" required />}
+            renderOption={(props, option) => (
+              <Box component="li" {...props} key={option.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Avatar src={option.imageUrl} sx={{ width: 24, height: 24 }} />
+                <Typography variant="body2">{option.fullName}</Typography>
+              </Box>
+            )}
+            fullWidth
+          />
 
           <TextField
             margin="dense"
@@ -923,6 +948,7 @@ const UserScheduleManager = () => {
             value={formData.workDate}
             onChange={handleFormChange}
             InputLabelProps={{ shrink: true }}
+            inputProps={{ min: currentSchedule ? undefined : minDateForNew }}
             required
           />
 
@@ -937,12 +963,29 @@ const UserScheduleManager = () => {
                 <InputLabel id="shiftType-label">Loại Ca</InputLabel>
                 <Select
                   labelId="shiftType-label"
-                  value={shiftForm.shiftType}
+                  value={formData.timeSlotId || ''}
                   label="Loại Ca"
                   onChange={(e) => {
-                    console.log('Select onChange triggered with value:', e.target.value);
-                    console.log('Event target:', e.target);
-                    handleShiftFormChange('shiftType', e.target.value);
+                    const selectedSlotId = e.target.value;
+                    const selectedTimeslot = timeslots.find(slot => (slot.slotId || slot.slot_id || slot.id) === selectedSlotId);
+
+                    if (selectedTimeslot) {
+                        const slotName = selectedTimeslot.shift || selectedTimeslot.slotName || selectedTimeslot.name;
+                        const startTime = (selectedTimeslot.startTime || selectedTimeslot.start_time || '').substring(0, 5);
+                        const endTime = (selectedTimeslot.endTime || selectedTimeslot.end_time || '').substring(0, 5);
+
+                        // Update all relevant state
+                        setFormData(prev => ({ ...prev, timeSlotId: selectedSlotId, shift: formatShift(slotName, startTime, endTime) }));
+                        setShiftForm({
+                            shiftType: slotName,
+                            startTime: startTime,
+                            endTime: endTime
+                        });
+                    } else {
+                        // Reset if "Chọn Ca" is selected
+                        setFormData(prev => ({ ...prev, timeSlotId: '', shift: '' }));
+                        setShiftForm({ shiftType: '', startTime: '', endTime: '' });
+                    }
                   }}
                   MenuProps={{
                     PaperProps: {
@@ -1007,7 +1050,7 @@ const UserScheduleManager = () => {
           </Grid>
 
           {/* Preview of formatted shift */}
-          {formData.shift && (
+          {/* {formData.shift && (
             <Box sx={{ mt: 2, p: 2, backgroundColor: '#e3f2fd', borderRadius: 1 }}>
               <Typography variant="body2" color="primary">
                 <ClockCircleOutlined style={{ marginRight: 8 }} />
@@ -1017,14 +1060,16 @@ const UserScheduleManager = () => {
                 Ca làm việc sẽ được lưu với định dạng này
               </Typography>
             </Box>
-          )}
+          )} */}
 
           {/* Check-in/Check-out Times */}
-          <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>
-            Giờ Vào & Giờ Ra (Tùy Chọn)
-          </Typography>
+          {currentSchedule &&
+            <>
+              <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>
+                Giờ Vào & Giờ Ra (Tùy Chọn)
+              </Typography>
 
-          <Grid container spacing={2}>
+              <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
               <TextField
                 margin="dense"
@@ -1051,6 +1096,8 @@ const UserScheduleManager = () => {
               />
             </Grid>
           </Grid>
+            </>
+          }
 
           {/* Preview check-in/check-out times */}
           {(timeForm.checkInTime || timeForm.checkOutTime) && (

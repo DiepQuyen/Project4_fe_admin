@@ -13,6 +13,8 @@ import ReviewList from '../pages/review/review';
 import FeedbackManager from '../pages/feedback/feedback';
 import TimeSlotManagement from '../pages/timeslot/timeslot';
 import SkillManagement from '../pages/spa/skill';
+import SkillUserManagement from '../pages/spa/skilluser';
+import ProfilePage from '../pages/profile/profile';
 import path from 'path';
 
 // render- Dashboard
@@ -74,9 +76,10 @@ const MainRoutes = {
           path: 'service',
           element: <ProtectedRoute element={<RoleManger />} />
         },
+       
         {
-          path: 'skill',
-          element: <ProtectedRoute element={<SkillManagement />} />
+          path: 'skillManagement',
+          element: <ProtectedRoute element={<SkillUserManagement />} />
         }
       ]
     },
@@ -123,6 +126,10 @@ const MainRoutes = {
   {
     path: 'timeslot',
     element: <ProtectedRoute element={<TimeSlotManagement />} />
+  },
+  {
+    path: 'profile',
+    element: <ProtectedRoute element={<ProfilePage />} />
   },
     {
       path: 'typography',

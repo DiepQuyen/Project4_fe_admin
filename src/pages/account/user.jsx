@@ -46,7 +46,7 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 // REFACTOR: API URL đã được cập nhật để khớp với backend controller mới
-const API_URL = 'https://sparlex.up.railway.app/api/v1/customers';
+const API_URL = 'https://sparlex-spa.up.railway.app/api/v1/customers';
 
 // ==============================|| USER ACCOUNT PAGE ||============================== //
 
@@ -338,7 +338,7 @@ const UserAccount = () => {
         
         {/* Table */}
         <Grid item xs={12}>
-            <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
+            <TableContainer component={Paper} sx={{ maxHeight: 800 }}>
               {loading && <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>}
               {!loading && (
                 <>
@@ -346,11 +346,11 @@ const UserAccount = () => {
                         <TableHead>
                             <TableRow>
                                 <TableCell align={'left'} width="5%">#</TableCell>
-                                <TableCell align={'left'} width="25%">Name</TableCell>
-                                <TableCell align={'left'} width="15%">Number</TableCell>
+                                <TableCell align={'left'} width="25%">Tên</TableCell>
+                                <TableCell align={'left'} width="15%">Số điện thoại</TableCell>
                                 <TableCell align={'left'} width="20%">Email</TableCell>
-                                <TableCell align={'center'} width="10%">Status</TableCell>
-                                <TableCell width="15%" align="center">Action</TableCell>
+                                <TableCell align={'center'} width="10%">Trạng thái</TableCell>
+                                <TableCell width="15%" align="center">Hành động</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>

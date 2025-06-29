@@ -3,7 +3,7 @@ import {
   Grid, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Select, FormControl,
   InputLabel, Switch, FormControlLabel, IconButton, TablePagination, Box, InputAdornment, Chip,
-  Avatar, Typography, Divider, Tooltip
+  Avatar, Typography, Divider, Tooltip, CircularProgress
 } from '@mui/material';
 import {
   PlusOutlined,
@@ -20,9 +20,9 @@ import MainCard from 'components/MainCard';
 import Cookies from 'js-cookie';
 import { toast } from 'react-toastify';
 
-const API_URL = 'https://sparlex.up.railway.app/api/v1/admin/accounts';
-const ROLE_URL = 'https://sparlex.up.railway.app/api/v1/roles';
-const SKILL_URL = 'https://sparlex.up.railway.app/api/v1/user/accounts/skill';
+const API_URL = 'https://sparlex-spa.up.railway.app/api/v1/admin/accounts';
+const ROLE_URL = 'https://sparlex-spa.up.railway.app/api/v1/roles';
+const SKILL_URL = 'https://sparlex-spa.up.railway.app/api/v1/user/accounts/skill';
 
 const AdminAccount = () => {
   const [users, setUsers] = useState([]);
@@ -185,7 +185,7 @@ const AdminAccount = () => {
     const formData = new FormData();
     formData.append('file', file);
 
-    const res = await fetch('https://sparlex.up.railway.app/api/v1/upload', {
+    const res = await fetch('https://sparlex-spa.up.railway.app/api/v1/upload', {
       method: 'POST',
       body: formData,
     });
@@ -382,7 +382,7 @@ const AdminAccount = () => {
         </Grid>
         <Grid item xs={12}>
           <Box sx={{ width: '100%', overflow: 'hidden' }}>
-            <TableContainer component={Paper} sx={{ maxHeight: 440, '& .MuiTableHead-root': { position: 'sticky', top: 0, zIndex: 10 } }}>
+            <TableContainer component={Paper} sx={{ maxHeight: 800, '& .MuiTableHead-root': { position: 'sticky', top: 0, zIndex: 10 } }}>
               <Table stickyHeader>
                 <TableHead>
                   <TableRow>
@@ -396,7 +396,14 @@ const AdminAccount = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {currentUsers.length > 0 ? (
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                        <CircularProgress />
+                        <Typography sx={{ mt: 1 }}>Đang tải dữ liệu người dùng...</Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : currentUsers.length > 0 ? (
                     currentUsers.map((user, index) => (
                       <TableRow key={user.id} hover>
                         <TableCell>{page * rowsPerPage + index + 1}</TableCell>
@@ -749,7 +756,7 @@ const AdminAccount = () => {
                   Kỹ Năng
                 </Typography>
                 {currentUser.skills && currentUser.skills.length > 0 ? (
-                  <TableContainer component={Paper}>
+                  <TableContainer sx={{ maxHeight: 800 }} component={Paper}>
                     <Table>
                       <TableHead>
                         <TableRow>

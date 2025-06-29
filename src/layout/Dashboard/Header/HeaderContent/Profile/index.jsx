@@ -80,7 +80,7 @@ export default function Profile() {
 
   const handleLogout = async () => {
     try {
-      await fetch('https://sparlex.up.railway.app/api/v1/userDetail/logout', { method: 'POST', credentials: 'include' });
+      await fetch('https://sparlex-spa.up.railway.app/api/v1/userDetail/logout', { method: 'POST', credentials: 'include' });
     } catch (e) { }
      Cookies.remove('admin_token', { path: '/admin' });
   Cookies.remove('admin_role', { path: '/admin' });

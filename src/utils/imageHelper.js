@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://sparlex.up.railway.app';
+const API_BASE_URL = 'https://sparlex-spa.up.railway.app';
 
 /**
  * Formats an image URL from the backend to be a full, valid URL.

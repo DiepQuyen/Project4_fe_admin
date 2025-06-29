@@ -2,7 +2,7 @@ import { RouterProvider } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 // project imports
-import './app.css'
+import './App.css'
 import router from 'routes';
 import ThemeCustomization from 'themes';
 

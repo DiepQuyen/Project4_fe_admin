@@ -4,7 +4,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Select, FormControl,
   InputLabel, IconButton, TablePagination, Box, InputAdornment, Chip, MenuItem,
   Typography, Divider, Tooltip, Accordion, AccordionSummary, AccordionDetails,
-  Card, CardContent, List, ListItem, ListItemText, ListItemIcon
+  Card, CardContent, List, ListItem, ListItemText, ListItemIcon, CircularProgress
 } from '@mui/material';
 import {
   SearchOutlined,
@@ -30,9 +30,14 @@ import { useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import ImageAvatar from 'components/ImageAvatar';
 
-const API_URL = 'https://sparlex.up.railway.app/api/v1/admin/appointment';
-const API_STAFF_URL = 'https://sparlex.up.railway.app/api/v1/admin/accounts/find-all';
-const EMAIL_API_URL = 'https://sparlex.up.railway.app/api/v1/email/send-appointment-confirmation';
+const API_URL = 'https://sparlex-spa.up.railway.app/api/v1/admin/appointment';
+const API_STAFF_URL = 'https://sparlex-spa.up.railway.app/api/v1/admin/accounts/find-all';
+const EMAIL_API_URL = 'https://sparlex-spa.up.railway.app/api/v1/email/send-appointment-confirmation';
+
+const formatCurrency = (value) => {
+  if (value == null || isNaN(value)) return 'N/A';
+  return `${new Intl.NumberFormat('vi-VN').format(value)} VND`;
+};
 
 const AppointmentManagement = () => {
   // States
@@ -57,6 +62,7 @@ const AppointmentManagement = () => {
   const [pageTitle, setPageTitle] = useState('Quản Lý Lịch Hẹn');
 
   const [staffList, setStaffList] = useState([]);
+  const [serviceList, setServiceList] = useState([]);
   const [editDetailDialogOpen, setEditDetailDialogOpen] = useState(false);
   const [appointmentToEditDetails, setAppointmentToEditDetails] = useState(null);
   const [selectedStaffId, setSelectedStaffId] = useState(null);
@@ -65,9 +71,9 @@ const AppointmentManagement = () => {
   const [appointmentToSendEmail, setAppointmentToSendEmail] = useState(null);
   const [emailSending, setEmailSending] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [appointmentToCancel, setAppointmentToCancel] = useState(null)
-  const [staffFilter, setStaffFilter] = useState('');
-  const [serviceFilter, setServiceFilter] = useState('');
+  const [appointmentToCancel, setAppointmentToCancel] = useState(null);
+  // const [staffFilter, setStaffFilter] = useState('');
+  // const [serviceFilter, setServiceFilter] = useState('');
 
   useEffect(() => {
     const dateFromUrl = searchParams.get('date');
@@ -317,7 +323,19 @@ const AppointmentManagement = () => {
       });
   }, []);
 
-
+  // Fetch danh sách dịch vụ
+  useEffect(() => {
+    fetch('https://sparlex-spa.up.railway.app/api/v1/services')
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'SUCCESS' && Array.isArray(data.data)) {
+          setServiceList(data.data);
+        } else {
+          toast.error('Không thể tải danh sách dịch vụ.');
+        }
+      })
+      .catch(() => toast.error('Lỗi kết nối khi tải danh sách dịch vụ.'));
+  }, []);
 
   // Filter appointments
   useEffect(() => {
@@ -334,12 +352,12 @@ const AppointmentManagement = () => {
         return appointmentDate >= start && appointmentDate <= end;
       });
     }
-    if (staffFilter) {
-      results = results.filter(appointment => String(appointment.staff?.id) === String(staffFilter));
-    }
-    if (serviceFilter) {
-      results = results.filter(appointment => String(appointment.service?.id) === String(serviceFilter));
-    }
+    // if (staffFilter) {
+    //   results = results.filter(appointment => appointment.staff?.name === staffFilter);
+    // }
+    // if (serviceFilter) {
+    //   results = results.filter(appointment => appointment.service?.name === serviceFilter);
+    // }
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       results = results.filter(
@@ -351,7 +369,7 @@ const AppointmentManagement = () => {
     }
     setFilteredAppointments(results);
     setPage(0);
-  }, [searchQuery, statusFilter, dateFilter, staffFilter, serviceFilter, appointments]);
+  }, [searchQuery, statusFilter, dateFilter, appointments]);
 
   // Handlers
   const handleChangePage = (event, newPage) => setPage(newPage);
@@ -433,24 +451,16 @@ const AppointmentManagement = () => {
     if (!currentAppointment) return;
     setLoading(true);
 
-    const dateObj = new Date(currentAppointment.appointmentDate);
-    const day = String(dateObj.getDate()).padStart(2, '0');
-    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const year = dateObj.getFullYear();
-    const formattedDate = `${day}/${month}/${year}`;
-
+    // CHỈ GỬI STATUS KHI UPDATE STATUS ĐỂ TRÁNH CONFLICT CHECK
     const updatePayload = {
+      status: newStatus,
+      // Chỉ gửi thêm các field bắt buộc tối thiểu
       fullName: currentAppointment.customer.name,
       phoneNumber: currentAppointment.customer.phone,
-      email: currentAppointment.customer.email,
-      status: newStatus,
-      slot: currentAppointment.timeSlot.slot,
-      notes: currentAppointment.notes,
-      appointmentDate: formattedDate,
-      price: currentAppointment.price,
-      userId: currentAppointment.staff.id,
-      serviceId: currentAppointment.service.id,
+      notes: currentAppointment.notes || ''
     };
+
+    console.log('🔄 Updating status only, payload:', updatePayload);
 
     fetch(`${API_URL}/update?AiD=${currentAppointment.id}`, {
       method: 'PUT',
@@ -460,7 +470,7 @@ const AppointmentManagement = () => {
       .then(res => res.json())
       .then(data => {
         if (data.status === 'SUCCESS') {
-          toast.success('Cập nhật trạng thái thành công');
+          toast.success(`Cập nhật trạng thái thành công: ${newStatus}`);
           const updatedAppointments = appointments.map(a =>
             a.id === currentAppointment.id
               ? { ...a, status: newStatus }
@@ -468,12 +478,18 @@ const AppointmentManagement = () => {
           );
           setAppointments(updatedAppointments);
           handleStatusDialogClose();
+          
+          // Refresh lại danh sách để đảm bảo đồng bộ
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
         } else {
           toast.error(data.message || 'Cập nhật thất bại');
         }
         setLoading(false);
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error('❌ Status update error:', error);
         toast.error('Lỗi khi cập nhật trạng thái');
         setLoading(false);
         handleStatusDialogClose();
@@ -807,10 +823,85 @@ const AppointmentManagement = () => {
     }
   };
 
-  const handleSaveAppointmentDetails = () => {
+  // Hàm riêng để assign/unassign staff
+  const handleStaffAssignment = () => {
     if (!appointmentToEditDetails) return;
 
     // Kiểm tra xung đột lịch trước khi save
+    if (selectedStaffId && isStaffBusy(selectedStaffId, appointmentToEditDetails)) {
+      const selectedStaff = staffList.find(s => s.id === selectedStaffId);
+      const conflictingApps = appointments.filter(app =>
+        app.staff.id === selectedStaffId &&
+        app.id !== appointmentToEditDetails.id &&
+        new Date(app.appointmentDate).toDateString() === new Date(appointmentToEditDetails.appointmentDate).toDateString() &&
+        app.status !== 'cancelled'
+      ).filter(app => isTimeConflict(appointmentToEditDetails, app));
+
+      const conflictDetails = conflictingApps.map(app =>
+        `${formatTime(app.appointmentDate)}-${formatTime(app.endTime)} (${app.customer.name})`
+      ).join(', ');
+
+      toast.error(
+        `❌ CONFLICT DETECTED: ${selectedStaff?.staffName} is already busy during this time slot!\n\n` +
+        `Conflicting appointments: ${conflictDetails}\n\n` +
+        `Current appointment: ${formatTime(appointmentToEditDetails.appointmentDate)}-${formatTime(appointmentToEditDetails.endTime)}`,
+        { autoClose: 8000 }
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    // Chỉ gửi thông tin cần thiết cho việc assign staff
+    const staffAssignmentPayload = {
+      fullName: appointmentToEditDetails.customer.name,
+      phoneNumber: appointmentToEditDetails.customer.phone,
+      notes: appointmentToEditDetails.notes,
+      userId: selectedStaffId
+    };
+
+    console.log('👤 Assigning staff, payload:', staffAssignmentPayload);
+
+    fetch(`${API_URL}/update?AiD=${appointmentToEditDetails.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(staffAssignmentPayload)
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'SUCCESS') {
+          toast.success('Cập nhật nhân viên thành công!');
+          // Cập nhật lại danh sách appointments trên FE
+          const newStaffMemberInfo = staffList.find(staff => staff.id === selectedStaffId);
+
+          const updatedAppointments = appointments.map(app =>
+            app.id === appointmentToEditDetails.id
+              ? {
+                ...app,
+                staff: newStaffMemberInfo
+                  ? { id: newStaffMemberInfo.id, name: newStaffMemberInfo.fullName }
+                  : null,
+                notes: staffAssignmentPayload.notes
+              }
+              : app
+          );
+          setAppointments(updatedAppointments);
+          handleCloseEditDetailDialog();
+        } else {
+          toast.error(data.message || 'Cập nhật nhân viên thất bại');
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        toast.error('Lỗi khi cập nhật nhân viên');
+        setLoading(false);
+      });
+  };
+
+  const handleSaveAppointmentDetails = () => {
+    if (!appointmentToEditDetails) return;
+
+    // Kiểm tra xung đột lịch trước khi save (chỉ khi có thay đổi time/staff)
     if (selectedStaffId && isStaffBusy(selectedStaffId, appointmentToEditDetails)) {
       const selectedStaff = staffList.find(s => s.id === selectedStaffId);
       const conflictingApps = appointments.filter(app =>
@@ -841,8 +932,7 @@ const AppointmentManagement = () => {
     const year = dateObj.getFullYear();
     const formattedAppDate = `${day}/${month}/${year}`;
 
-    // Payload này nên bao gồm tất cả các trường mà BE AppointmentDto cho phép cập nhật
-    // hoặc yêu cầu khi gọi API update.
+    // Payload cho việc update chi tiết appointment (không phải chỉ status)
     const updatePayload = {
       fullName: appointmentToEditDetails.customer.name,
       phoneNumber: appointmentToEditDetails.customer.phone,
@@ -853,9 +943,11 @@ const AppointmentManagement = () => {
       appointmentDate: formattedAppDate,
       price: appointmentToEditDetails.price,
       serviceId: appointmentToEditDetails.service?.id,
-      
-      userId: selectedStaffId
+      userId: selectedStaffId,
+      timeSlotId: appointmentToEditDetails.timeSlot?.id
     };
+
+    console.log('🔄 Updating appointment details, payload:', updatePayload);
 
     fetch(`${API_URL}/update?AiD=${appointmentToEditDetails.id}`, {
       method: 'PUT',
@@ -898,13 +990,22 @@ const AppointmentManagement = () => {
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('vi-VN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }); // Mặc định là dd/mm/yyyy ở vi-VN
   };
+
 
   const formatTime = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    return date.toLocaleTimeString('vi-VN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
   };
   const getStatusChipProps = (status) => {
     switch (status) {
@@ -923,7 +1024,7 @@ const AppointmentManagement = () => {
       <Grid container spacing={3}>
         {/* Search and Filter Controls */}
         <Grid item xs={12}>
-          <Card sx={{ p: 2, mb: 2 }}>
+          <Card sx={{ p: 0, mb: 0 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <FilterOutlined />
@@ -968,26 +1069,7 @@ const AppointmentManagement = () => {
                     <MenuItem value="cancelled">Đã hủy</MenuItem>
                   </Select>
                 </FormControl>
-                <FormControl size="small" sx={{ minWidth: 150 }}>
-                  <InputLabel>Nhân viên</InputLabel>
-                  <Select value={staffFilter} label="Nhân viên" onChange={e => setStaffFilter(e.target.value)}>
-                    <MenuItem value="">Tất cả</MenuItem>
-                    {staffList.map(staff => (
-                      <MenuItem key={staff.id} value={staff.id}>{staff.fullName}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl size="small" sx={{ minWidth: 150 }}>
-                  <InputLabel>Dịch vụ</InputLabel>
-                  <Select value={serviceFilter} label="Dịch vụ" onChange={e => setServiceFilter(e.target.value)}>
-                    <MenuItem value="">Tất cả</MenuItem>
-                    {[...new Set(appointments.map(app => app.service?.id && app.service))]
-                      .filter(Boolean)
-                      .map(service => (
-                        <MenuItem key={service.id} value={service.id}>{service.name}</MenuItem>
-                      ))}
-                  </Select>
-                </FormControl>
+                
                 <TextField
                   size="small"
                   label="Từ ngày"
@@ -1012,8 +1094,8 @@ const AppointmentManagement = () => {
                   setStatusFilter('all');
                   setDateFilter({ startDate: '', endDate: '' });
                   setSearchQuery('');
-                  setStaffFilter('');
-                  setServiceFilter('');
+                  // setStaffFilter('');
+                  // setServiceFilter('');
                   setPageTitle('Quản Lý Lịch Hẹn');
                 }}>Xóa bộ lọc</Button>
                 {location.state && location.state.fromReview && (
@@ -1031,15 +1113,15 @@ const AppointmentManagement = () => {
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" color="text.secondary">
                   Hiển thị {filteredAppointments.length} / {appointments.length} lịch hẹn
-                  {(statusFilter !== 'all' || dateFilter.startDate || dateFilter.endDate || searchQuery || staffFilter || serviceFilter) && (
+                  {(statusFilter !== 'all' || dateFilter.startDate || dateFilter.endDate || searchQuery) && (
                     <Button 
                       size="small" 
                       onClick={() => {
                         setStatusFilter('all');
                         setDateFilter({ startDate: '', endDate: '' });
                         setSearchQuery('');
-                        setStaffFilter('');
-                        setServiceFilter('');
+                        // setStaffFilter('');
+                        // setServiceFilter('');
                         setPageTitle('Quản Lý Lịch Hẹn');
                       }}
                       sx={{ ml: 2 }}
@@ -1055,23 +1137,28 @@ const AppointmentManagement = () => {
 
         {/* Appointments Table */}
         <Grid item xs={12}>
-          <TableContainer component={Paper} sx={{ maxHeight: 440, '& .MuiTableHead-root': { position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#f8f8f8' } }}>
+          <TableContainer component={Paper} sx={{ maxHeight: 725, '& .MuiTableHead-root': { position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#f8f8f8' } }}>
             <Table stickyHeader>
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ fontWeight: 600 }}>ID</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Customer</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Service</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Date & Time</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Staff</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Khách Hàng</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Dịch Vụ</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Thời Gian</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Nhân Viên</TableCell>
                   
-                  <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: 600, textAlign: 'center' }}>Actions</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Trạng Thái</TableCell>
+                  <TableCell sx={{ fontWeight: 600, textAlign: 'center' }}>Thao Tác</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={8} align="center">Loading...</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                      <CircularProgress />
+                      <Typography sx={{ mt: 1 }}>Đang tải dữ liệu lịch hẹn...</Typography>
+                    </TableCell>
+                  </TableRow>
                 ) : currentAppointments.length > 0 ? (
                   currentAppointments.map((appointment) => {
                     const statusProps = getStatusChipProps(appointment.status);
@@ -1089,11 +1176,15 @@ const AppointmentManagement = () => {
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>{appointment.service?.name}</Typography>
-                          <Typography variant="caption" color="primary">${appointment.price?.toFixed(2)} • {appointment.service?.duration} min</Typography>
+                          <Typography variant="subtitle2" color="primary" sx={{ cursor: 'pointer' }}>
+                            {formatCurrency(appointment.service.price)} • {appointment.service.duration} phút
+                          </Typography>
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>{formatDate(appointment.appointmentDate)}</Typography>
-                          <Typography variant="caption" color="textSecondary">{formatTime(appointment.appointmentDate)} - {formatTime(appointment.endTime)}</Typography>
+                          <Typography variant="caption" color="textSecondary">
+                            {formatTime(appointment.appointmentDate)} - {formatTime(appointment.endTime)}
+                          </Typography>
                         </TableCell>
                         <TableCell>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1106,33 +1197,25 @@ const AppointmentManagement = () => {
                           <Chip icon={statusProps.icon} label={statusProps.label} size="small" color={statusProps.color} sx={{ borderRadius: '16px', fontWeight: 500, fontSize: '0.75rem' }} />
                         </TableCell>
                         <TableCell sx={{ textAlign: 'center' }}>
-                          <Tooltip title="View Details">
+                          <Tooltip title="Xem chi tiết">
                             <IconButton onClick={() => handleViewOpen(appointment)} color="info" size="small"><EyeOutlined /></IconButton>
                           </Tooltip>
-                          <Tooltip title={appointment.status === 'completed' || appointment.status === 'cancelled' ? `Cannot update status` : "Update Status"}>
-                            <span>
-                              <IconButton onClick={() => handleStatusDialogOpen(appointment)} color="primary" size="small" disabled={appointment.status === 'completed' || appointment.status === 'cancelled'} >
-                                <EditOutlined />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                          <Tooltip title="Edit Details / Assign Staff">
-                            <IconButton onClick={() => handleOpenEditDetailDialog(appointment)} color="secondary" size="small">
-                              <FormOutlined />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title={!appointment.customer?.email ? "No customer email available" : "Send Confirmation Email"}>
-                            <span>
-                              <IconButton
-                                onClick={() => handleOpenEmailConfirmation(appointment)}
-                                color="success"
-                                size="small"
-                                disabled={!appointment.customer?.email}
-                              >
-                                <MailOutlined />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
+                          
+                          {appointment.status !== 'completed' && appointment.status !== 'cancelled' && (
+                            <>
+                              <Tooltip title="Update Status">
+                                <IconButton onClick={() => handleStatusDialogOpen(appointment)} color="primary" size="small">
+                                  <EditOutlined />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Edit Details / Assign Staff">
+                                <IconButton onClick={() => handleOpenEditDetailDialog(appointment)} color="secondary" size="small">
+                                  <FormOutlined />
+                                </IconButton>
+                              </Tooltip>
+                            </>
+                          )}
+                          
                           <Tooltip title={
                             (appointment.status === 'completed' || appointment.status === 'cancelled')
                               ? `Không thể hủy lịch hẹn đã '${appointment.status}'`
@@ -1154,7 +1237,7 @@ const AppointmentManagement = () => {
                     );
                   })
                 ) : (
-                  <TableRow><TableCell colSpan={8} align="center">No appointments found</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} align="center">Không tìm thấy lịch hẹn nào</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -1174,7 +1257,7 @@ const AppointmentManagement = () => {
       {/* View Appointment Details Dialog */}
       <Dialog open={viewOpen} onClose={handleViewClose} maxWidth="md" fullWidth>
         <DialogTitle sx={{ borderBottom: '1px solid #e0e0e0', pb: 2 }}>
-          Appointment Details
+          Chi tiết lịch hẹn
           <IconButton aria-label="close" onClick={handleViewClose} sx={{ position: 'absolute', right: 8, top: 8 }}><CloseOutlined /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ pt: 3 }}>
@@ -1182,7 +1265,7 @@ const AppointmentManagement = () => {
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6}>
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" gutterBottom>Customer Information</Typography>
+                  <Typography variant="h6" gutterBottom>Thông tin khách hàng</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                     <ImageAvatar src={currentAppointment.customer?.image} alt={currentAppointment.customer?.name} sx={{ width: 64, height: 64 }} />
                     <Box>
@@ -1193,14 +1276,14 @@ const AppointmentManagement = () => {
                   </Box>
                 </Box>
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" gutterBottom>Appointment Details</Typography>
+                  <Typography variant="h6" gutterBottom>Chi tiết lịch hẹn</Typography>
                   <Grid container spacing={2}>
-                    <Grid item xs={6}><Typography variant="caption" color="textSecondary">Date</Typography><Typography variant="body2" sx={{ fontWeight: 500 }}>{formatDate(currentAppointment.appointmentDate)}</Typography></Grid>
-                    <Grid item xs={6}><Typography variant="caption" color="textSecondary">Time</Typography><Typography variant="body2" sx={{ fontWeight: 500 }}>{formatTime(currentAppointment.appointmentDate)} - {formatTime(currentAppointment.endTime)}</Typography></Grid>
+                    <Grid item xs={6}><Typography variant="caption" color="textSecondary">Ngày</Typography><Typography variant="body2" sx={{ fontWeight: 500 }}>{formatDate(currentAppointment.appointmentDate)}</Typography></Grid>
+                    <Grid item xs={6}><Typography variant="caption" color="textSecondary">Giờ</Typography><Typography variant="body2" sx={{ fontWeight: 500 }}>{formatTime(currentAppointment.appointmentDate)} - {formatTime(currentAppointment.endTime)}</Typography></Grid>
 
-                    <Grid item xs={6}><Typography variant="caption" color="textSecondary">Status</Typography><Box sx={{ mt: 0.5 }}><Chip {...getStatusChipProps(currentAppointment.status)} size="small" /></Box></Grid>
+                    <Grid item xs={6}><Typography variant="caption" color="textSecondary">Trạng thái</Typography><Box sx={{ mt: 0.5 }}><Chip {...getStatusChipProps(currentAppointment.status)} size="small" /></Box></Grid>
                     <Grid item xs={12}>
-                      <Typography variant="caption" color="textSecondary">Staff Assigned</Typography>
+                      <Typography variant="caption" color="textSecondary">Nhân viên phụ trách</Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
                         <ImageAvatar src={currentAppointment.staff?.image} alt={currentAppointment.staff?.name} sx={{ width: 24, height: 24 }} />
                         <Box>
@@ -1209,48 +1292,39 @@ const AppointmentManagement = () => {
                         </Box>
                       </Box>
                     </Grid>
-                    {currentAppointment.notes && (<Grid item xs={12}><Typography variant="caption" color="textSecondary">Notes</Typography><Typography variant="body2">{currentAppointment.notes}</Typography></Grid>)}
+                    {currentAppointment.notes && (<Grid item xs={12}><Typography variant="caption" color="textSecondary">Ghi chú</Typography><Typography variant="body2">{currentAppointment.notes}</Typography></Grid>)}
                   </Grid>
                 </Box>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" gutterBottom>Service Information</Typography>
+                  <Typography variant="h6" gutterBottom>Thông tin dịch vụ</Typography>
                   <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>{currentAppointment.service.name}</Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}><Typography variant="body2">Price:</Typography><Typography variant="body2" color="primary" sx={{ fontWeight: 600 }}>${currentAppointment.price?.toFixed(2)}</Typography></Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography variant="body2">Duration:</Typography><Typography variant="body2">{currentAppointment.service.duration} minutes</Typography></Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}><Typography variant="body2">Giá:</Typography><Typography variant="body2" color="primary" sx={{ fontWeight: 600 }}>{formatCurrency(currentAppointment.price)}</Typography></Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography variant="body2">Thời lượng:</Typography><Typography variant="body2">{currentAppointment.service.duration} phút</Typography></Box>
                   </Paper>
                 </Box>
                 <Box>
-                  <Typography variant="h6" gutterBottom>Booking Information</Typography>
+                  <Typography variant="h6" gutterBottom>Thông tin đặt lịch</Typography>
                   <Grid container spacing={2}>
-                    <Grid item xs={6}><Typography variant="caption" color="textSecondary">Booking ID</Typography><Typography variant="body2">#{currentAppointment.id}</Typography></Grid>
-                    <Grid item xs={6}><Typography variant="caption" color="textSecondary">Created On</Typography><Typography variant="body2">{formatDate(currentAppointment.createdAt)}</Typography></Grid>
+                    <Grid item xs={6}><Typography variant="caption" color="textSecondary">Mã đặt lịch</Typography><Typography variant="body2">#{currentAppointment.id}</Typography></Grid>
+                    <Grid item xs={6}><Typography variant="caption" color="textSecondary">Ngày tạo</Typography><Typography variant="body2">{formatDate(currentAppointment.createdAt)}</Typography></Grid>
                     <Grid item xs={12}>
                       <Divider sx={{ my: 1 }} />
                       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2, gap: 1 }}>
-                        <Tooltip title={currentAppointment.status === 'completed' ? `Status is 'completed'. Cannot update.` : "Update Status"}>
-                          <span>
-                            <Button variant="outlined" color="primary" onClick={() => handleStatusDialogOpen(currentAppointment)} disabled={currentAppointment.status === 'completed'}>Update Status</Button>
-                          </span>
-                        </Tooltip>
-                        <Tooltip title="Edit Details / Assign Staff">
-                          <Button variant="contained" color="secondary" onClick={() => { handleViewClose(); handleOpenEditDetailDialog(currentAppointment); }}>Edit Details</Button>
-                        </Tooltip>
-                        <Tooltip title={!currentAppointment.customer?.email ? "No customer email available" : "Send Confirmation Email"}>
-                          <span>
-                            <Button
-                              variant="contained"
-                              color="success"
-                              onClick={() => { handleViewClose(); handleOpenEmailConfirmation(currentAppointment); }}
-                              disabled={!currentAppointment.customer?.email}
-                              startIcon={<MailOutlined />}
-                            >
-                              Send Email
-                            </Button>
-                          </span>
-                        </Tooltip>
+                        
+                        {currentAppointment.status !== 'completed' && currentAppointment.status !== 'cancelled' && (
+                          <>
+                            <Tooltip title="Cập nhật trạng thái">
+                              <Button variant="outlined" color="primary" onClick={() => handleStatusDialogOpen(currentAppointment)}>Cập nhật trạng thái</Button>
+                            </Tooltip>
+                            <Tooltip title="Chỉnh sửa thông tin/gán nhân viên phụ trách">
+                              <Button variant="contained" color="secondary" onClick={() => { handleViewClose(); handleOpenEditDetailDialog(currentAppointment); }}>Chỉnh sửa</Button>
+                            </Tooltip>
+                          </>
+                        )}
+
                         <Tooltip title={
                           (currentAppointment.status === 'completed' || currentAppointment.status === 'cancelled')
                             ? `Không thể hủy lịch hẹn đã '${currentAppointment.status}'`
@@ -1312,16 +1386,7 @@ const AppointmentManagement = () => {
                 <Typography variant="body2" color="textSecondary" gutterBottom>
                   Service: {appointmentToEditDetails.service?.name} on {formatDate(appointmentToEditDetails.appointmentDate)} at {formatTime(appointmentToEditDetails.appointmentDate)}
                 </Typography>
-                <Box sx={{ mt: 2, mb: 2, p: 2, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
-                  <Typography variant="body2" color="primary" sx={{ mb: 1 }}>
-                    <CalendarOutlined style={{ marginRight: 8 }} />
-                    Schedule Conflict Prevention: Staff members who already have appointments during this time slot will be marked as "Busy" and cannot be assigned.
-                  </Typography>
-                  <Typography variant="body2" color="secondary">
-                    <UserOutlined style={{ marginRight: 8 }} />
-                    Skill Matching: Only staff members with skills matching the service "{appointmentToEditDetails.service?.name}" are shown.
-                  </Typography>
-                </Box>
+                
               </Grid>
               <Grid item xs={12}>
                 <FormControl fullWidth margin="normal">
@@ -1399,17 +1464,12 @@ const AppointmentManagement = () => {
                       * Lọc nhân viên có kỹ năng phù hợp với "{appointmentToEditDetails.service.name}"
                     </Typography>
                     <Typography variant="caption" color="textSecondary" sx={{ display: 'block' }}>
-                      * Nhân viên "Busy" đã có lịch hẹn trong thời gian này
-                    </Typography>
-                    <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.5 }}>
-                      ⚠️ Nếu hiển thị nhân viên có badge "DEBUG", nghĩa là đang ở chế độ debug vì không tìm thấy kỹ năng phù hợp
-                    </Typography>
-                    <Typography variant="caption" color="info.main" sx={{ display: 'block' }}>
-                      🔍 Kiểm tra Browser Console (F12) để xem chi tiết quá trình matching skills
+                      * Nhân viên "Bận" đã có lịch hẹn trong thời gian này
                     </Typography>
                   </Box>
                 )}
               </Grid>
+          
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -1427,10 +1487,25 @@ const AppointmentManagement = () => {
             </Grid>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseEditDetailDialog} color="inherit">Cancel</Button>
-          <Button onClick={handleSaveAppointmentDetails} variant="contained" color="primary" disabled={loading}>
-            {loading ? 'Saving...' : 'Save Changes'}
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button onClick={handleCloseEditDetailDialog} color="inherit">
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleStaffAssignment} 
+            variant="outlined" 
+            color="secondary" 
+            disabled={loading}
+          >
+            {loading ? 'Assigning...' : 'Assign Staff Only'}
+          </Button>
+          <Button 
+            onClick={handleSaveAppointmentDetails} 
+            variant="contained" 
+            color="primary" 
+            disabled={loading}
+          >
+            {loading ? 'Saving...' : 'Save All Changes'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1466,7 +1541,7 @@ const AppointmentManagement = () => {
               </Grid>
 
               <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" color="textSecondary">Customer:</Typography>
+                <Typography variant="subtitle2" color="textSecondary">Khách:</Typography>
                 <Typography variant="body1" sx={{ fontWeight: 500 }}>
                   {appointmentToSendEmail.customer?.name}
                 </Typography>
@@ -1485,7 +1560,7 @@ const AppointmentManagement = () => {
               <Grid item xs={12} sm={6}>
                 <Typography variant="subtitle2" color="textSecondary">Price:</Typography>
                 <Typography variant="body1" color="primary" sx={{ fontWeight: 600 }}>
-                  ${appointmentToSendEmail.price?.toFixed(2)}
+                  {formatCurrency(appointmentToSendEmail.price)}
                 </Typography>
               </Grid>
 
